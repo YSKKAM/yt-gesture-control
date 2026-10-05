@@ -1,0 +1,57 @@
+# YouTube Gesture Control — Configuration
+# All thresholds use normalized coordinates (0.0 – 1.0) relative to frame size
+# unless explicitly noted in comments.
+
+gesture:
+  # Minimum horizontal travel (fraction of frame width) to count as a gesture
+  min_displacement_x: 0.20
+
+  # Maximum allowed vertical drift (fraction of frame height)
+  max_displacement_y: 0.12
+
+  # Horizontal movement must be >= this multiple of vertical movement
+  direction_ratio: 2.5
+
+  # Minimum average speed (normalized units per second)
+  min_speed: 0.15
+
+  # Maximum time (ms) from first to last valid tracking frame
+  max_gesture_duration_ms: 1500
+
+  # Minimum time (ms) — prevents single-frame spike triggers
+  min_gesture_duration_ms: 120
+
+  # Lockout after a gesture fires (ms)
+  cooldown_ms: 1000
+
+  # Minimum number of consecutive frames with hand detected before tracking starts
+  min_stable_frames: 3
+
+camera:
+  # Webcam device index (0 = first/default camera)
+  device_index: 0
+  width: 640
+  height: 480
+  fps: 20
+
+hand_tracking:
+  # MediaPipe detection confidence floor (0.0 – 1.0)
+  min_detection_confidence: 0.75
+  # MediaPipe tracking confidence floor (0.0 – 1.0)
+  min_tracking_confidence: 0.70
+  # Which hand landmark to use for position (0 = wrist, 9 = middle finger base)
+  tracking_landmark: 9
+
+youtube_control:
+  # Local WebSocket port — extension connects here
+  websocket_port: 9876
+  # How often to ping extension to check connection (seconds)
+  heartbeat_interval_s: 5
+
+logging:
+  # Log file location (relative to app root)
+  log_file: "logs/ytgc.log"
+  # Max log file size before rotation (bytes)
+  max_bytes: 5242880   # 5 MB
+  backup_count: 3
+  level: "INFO"

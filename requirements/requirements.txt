@@ -1,0 +1,7 @@
+opencv-python>=4.13.0
+mediapipe>=1.0.1
+pystray>=0.19.5
+Pillow>=12.1.1
+websockets>=17.1
+PyYAML>=6.0
+pywin32>=311
