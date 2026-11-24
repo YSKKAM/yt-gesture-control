@@ -26,14 +26,15 @@ _CONFIG_PATH = _PROJECT_ROOT / "config" / "config.yaml"
 # ---------------------------------------------------------------------------
 @dataclass
 class GestureConfig:
-    min_displacement_x: float = 0.20
-    max_displacement_y: float = 0.12
-    direction_ratio: float = 2.5
-    min_speed: float = 0.15
+    stable_frames_required: int = 2
+    cooldown_ms: int = 800
+    min_displacement_x: float = 0.16
+    max_displacement_y: float = 0.20
+    direction_ratio: float = 1.5
+    min_speed: float = 0.10
     max_gesture_duration_ms: int = 1500
-    min_gesture_duration_ms: int = 120
-    cooldown_ms: int = 1000
-    min_stable_frames: int = 3
+    min_gesture_duration_ms: int = 80
+    min_stable_frames: int = 2
 
 
 @dataclass

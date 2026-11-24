@@ -4,9 +4,9 @@ Control YouTube playback with a hand gesture — no clicking, no keyboard, no cl
 
 ## What it does
 
-Wave your hand in front of your webcam:
-- **Swipe LEFT → RIGHT** → YouTube **PAUSES**
-- **Swipe RIGHT → LEFT** → YouTube **PLAYS**
+Show your hand in front of your webcam:
+- ✊ **Closed Fist** → YouTube **PAUSES / STOPS**
+- ✋ **Open Palm**   → YouTube **PLAYS**
 
 Works while you're in any other application. YouTube doesn't need to be focused or clicked.
 
@@ -49,9 +49,9 @@ python -m app.main
 1. Open YouTube in Chrome/Edge and start a video
 2. In the desktop app, click **Enable Gesture Control**
 3. Status shows `Camera: Active` and `YouTube: Connected`
-4. Wave your hand:
-   - **Left → Right** to pause
-   - **Right → Left** to play
+4. Show your hand:
+   - ✊ **Closed Fist** to Pause / Stop
+   - ✋ **Open Palm** to Play / Resume
 
 ---
 

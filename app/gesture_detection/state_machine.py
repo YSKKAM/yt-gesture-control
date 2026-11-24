@@ -1,20 +1,12 @@
 """
 app/gesture_detection/state_machine.py
 
-Gesture finite state machine.
+State machine and debouncer for hand poses (Closed Fist = PAUSE, Open Palm = PLAY).
 
-States:
-  IDLE          → waiting for a hand to appear
-  HAND_DETECTED → hand present, checking for stability
-  TRACKING      → accumulating trajectory
-  COOLDOWN      → post-trigger lockout
-
-The FSM is driven by calling update() once per frame with an
-Optional[HandPosition]. When a gesture is confirmed it calls
-the registered on_gesture callback with the GestureDirection.
-
-Thread-safety: designed to be called from a single thread (the
-camera processing loop). The callback may dispatch to another thread.
+Provides:
+  - Multi-frame stability check (ignores momentary transitions or sensor noise)
+  - Change detection (triggers only when the user switches poses, preventing repeat spam)
+  - Post-trigger cooldown (avoids rapid toggling while holding a pose)
 """
 from __future__ import annotations
 
@@ -23,9 +15,7 @@ from enum import Enum, auto
 from typing import Callable, List, Optional
 
 from app.hand_tracking.tracker import HandPosition
-from app.gesture_detection.validator import (
-    GestureDirection, TrajectoryPoint, validate_gesture
-)
+from app.gesture_detection.validator import HandPose, GestureDirection
 from app.config.settings import settings
 from app.logging_setup.logger import get_logger
 
@@ -41,28 +31,21 @@ class FSMState(Enum):
 
 class GestureStateMachine:
     """
-    Processes a stream of Optional[HandPosition] and fires gesture callbacks.
-
-    Usage:
-        fsm = GestureStateMachine(on_gesture=my_callback)
-        while running:
-            pos = tracker.process(frame)
-            fsm.update(pos)
+    Tracks hand poses (OPEN_PALM -> PLAY, CLOSED_FIST -> PAUSE) and fires callbacks.
     """
 
-    def __init__(self, on_gesture: Callable[[GestureDirection], None]) -> None:
+    def __init__(self, on_gesture: Callable[[HandPose], None]) -> None:
         self._on_gesture = on_gesture
         self._state = FSMState.IDLE
-        self._trajectory: List[TrajectoryPoint] = []
-        self._stable_frame_count = 0
-        self._lost_frames_count = 0
+        self._last_confirmed_pose = HandPose.NONE
+        self._candidate_pose = HandPose.NONE
+        self._candidate_frame_count = 0
         self._cooldown_end_ms: float = 0.0
 
         cfg = settings.gesture
-        self._min_stable_frames = cfg.min_stable_frames
+        self._stable_frames_required = getattr(cfg, "stable_frames_required", 2)
         self._cooldown_ms = cfg.cooldown_ms
         self._min_confidence = settings.hand_tracking.min_detection_confidence
-        self._max_duration_ms = cfg.max_gesture_duration_ms
 
     # ------------------------------------------------------------------
     # Public API
@@ -75,44 +58,46 @@ class GestureStateMachine:
         """
         now_ms = time.monotonic() * 1000
 
-        if self._state == FSMState.COOLDOWN:
-            if now_ms >= self._cooldown_end_ms:
-                logger.debug("Cooldown expired — returning to IDLE")
-                self._transition(FSMState.IDLE)
+        # In cooldown: state remains COOLDOWN until timer expires
+        if now_ms < self._cooldown_end_ms:
+            self._state = FSMState.COOLDOWN
             return self._state
+
+        if self._state == FSMState.COOLDOWN:
+            self._state = FSMState.IDLE
 
         if hand is None or hand.confidence < self._min_confidence:
-            self._lost_frames_count += 1
-            # If we were tracking, allow up to 2 frames of dropped detection (motion blur)
-            if self._state == FSMState.TRACKING and self._lost_frames_count <= 2:
-                self._try_validate()
-                return self._state
-            self._on_hand_lost()
+            self._candidate_pose = HandPose.NONE
+            self._candidate_frame_count = 0
+            self._state = FSMState.IDLE
             return self._state
 
-        # Hand is present and confident
-        self._lost_frames_count = 0
+        # Hand is present
+        detected_pose = getattr(hand, "pose", HandPose.UNKNOWN)
 
-        if self._state == FSMState.IDLE:
-            self._stable_frame_count = 1
-            self._trajectory = [TrajectoryPoint(hand.x, hand.y, now_ms)]
-            self._transition(FSMState.HAND_DETECTED)
+        if detected_pose in (HandPose.NONE, HandPose.UNKNOWN):
+            self._candidate_pose = HandPose.NONE
+            self._candidate_frame_count = 0
+            self._state = FSMState.HAND_DETECTED
+            return self._state
 
-        elif self._state == FSMState.HAND_DETECTED:
-            self._stable_frame_count += 1
-            self._trajectory.append(TrajectoryPoint(hand.x, hand.y, now_ms))
-            if self._stable_frame_count >= self._min_stable_frames:
-                self._transition(FSMState.TRACKING)
+        # A specific pose (OPEN_PALM or CLOSED_FIST) was detected
+        self._state = FSMState.TRACKING
 
-        elif self._state == FSMState.TRACKING:
-            self._trajectory.append(TrajectoryPoint(hand.x, hand.y, now_ms))
+        if detected_pose == self._candidate_pose:
+            self._candidate_frame_count += 1
+        else:
+            self._candidate_pose = detected_pose
+            self._candidate_frame_count = 1
 
-            # Prune points older than max_duration_ms (keeps trajectory bounded and fresh)
-            cutoff_ms = now_ms - self._max_duration_ms
-            while len(self._trajectory) > 2 and self._trajectory[0].timestamp_ms < cutoff_ms:
-                self._trajectory.pop(0)
-
-            self._try_validate()
+        # Check if held stably for required frames
+        if self._candidate_frame_count >= self._stable_frames_required:
+            if self._candidate_pose != self._last_confirmed_pose:
+                self._last_confirmed_pose = self._candidate_pose
+                self._cooldown_end_ms = now_ms + self._cooldown_ms
+                self._state = FSMState.COOLDOWN
+                logger.info("Pose confirmed: %s", self._last_confirmed_pose.name)
+                self._on_gesture(self._last_confirmed_pose)
 
         return self._state
 
@@ -120,60 +105,13 @@ class GestureStateMachine:
     def state(self) -> FSMState:
         return self._state
 
+    @property
+    def last_confirmed_pose(self) -> HandPose:
+        return self._last_confirmed_pose
+
     def reset(self) -> None:
-        """Force reset to IDLE (e.g. on camera disconnect)."""
-        self._trajectory.clear()
-        self._stable_frame_count = 0
-        self._lost_frames_count = 0
-        self._transition(FSMState.IDLE)
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
-    def _on_hand_lost(self) -> None:
-        """Hand disappeared. If we were tracking, try to validate what we have."""
-        if self._state == FSMState.TRACKING and len(self._trajectory) >= 2:
-            self._try_validate()
-        self._trajectory.clear()
-        self._stable_frame_count = 0
-        self._lost_frames_count = 0
-        if self._state != FSMState.COOLDOWN:
-            self._transition(FSMState.IDLE)
-
-    def _trigger(self, direction: GestureDirection) -> None:
-        """Fire gesture confirmation and enter cooldown."""
-        logger.info("Gesture confirmed: %s", direction.name)
-        self._trajectory.clear()
-        self._stable_frame_count = 0
-        self._lost_frames_count = 0
-        self._cooldown_end_ms = time.monotonic() * 1000 + self._cooldown_ms
-        self._transition(FSMState.COOLDOWN)
-        self._on_gesture(direction)
-
-    def _try_validate(self) -> None:
-        """Attempt to validate the full trajectory or recent sub-stroke."""
-        if len(self._trajectory) < 2:
-            return
-
-        # 1. First test full trajectory
-        result = validate_gesture(self._trajectory)
-        if result.valid:
-            self._trigger(result.direction)
-            return
-
-        # 2. Test recent sub-strokes (in case hand rested briefly before waving)
-        # Check sub-slices from index 1 to len-2
-        for i in range(1, len(self._trajectory) - 1):
-            sub = self._trajectory[i:]
-            if len(sub) < 2:
-                break
-            sub_res = validate_gesture(sub)
-            if sub_res.valid:
-                self._trigger(sub_res.direction)
-                return
-
-    def _transition(self, new_state: FSMState) -> None:
-        if new_state != self._state:
-            logger.debug("FSM: %s → %s", self._state.name, new_state.name)
-            self._state = new_state
+        """Force reset state (e.g. on camera toggle or disconnect)."""
+        self._candidate_pose = HandPose.NONE
+        self._candidate_frame_count = 0
+        self._last_confirmed_pose = HandPose.NONE
+        self._state = FSMState.IDLE

@@ -18,6 +18,77 @@ from app.logging_setup.logger import get_logger
 logger = get_logger(__name__)
 
 
+class HandPose(Enum):
+    NONE = auto()
+    UNKNOWN = auto()
+    OPEN_PALM = auto()    # → PLAY
+    CLOSED_FIST = auto()  # → PAUSE / STOP
+
+
+def classify_pose_from_landmarks(landmarks) -> HandPose:
+    """
+    Classify hand pose from 21 MediaPipe landmarks geometrically.
+    Rotation and distance invariant (uses Euclidean distance ratios relative to wrist & joints).
+    """
+    import math
+
+    if not landmarks or len(landmarks) < 21:
+        return HandPose.NONE
+
+    wrist = landmarks[0]
+
+    def dist(p1, p2) -> float:
+        return math.hypot(p1.x - p2.x, p1.y - p2.y)
+
+    # 4 fingers: Index (5,6,8), Middle (9,10,12), Ring (13,14,16), Pinky (17,18,20)
+    finger_indices = [
+        (5, 6, 8),    # Index: MCP, PIP, TIP
+        (9, 10, 12),  # Middle: MCP, PIP, TIP
+        (13, 14, 16), # Ring: MCP, PIP, TIP
+        (17, 18, 20)  # Pinky: MCP, PIP, TIP
+    ]
+
+    extended_count = 0
+    curled_count = 0
+
+    for mcp_idx, pip_idx, tip_idx in finger_indices:
+        mcp = landmarks[mcp_idx]
+        pip = landmarks[pip_idx]
+        tip = landmarks[tip_idx]
+
+        d_tip_wrist = dist(tip, wrist)
+        d_pip_wrist = dist(pip, wrist)
+        d_mcp_wrist = dist(mcp, wrist)
+
+        # Extended: tip is further from wrist than PIP with margin
+        if d_tip_wrist > d_pip_wrist * 1.08:
+            extended_count += 1
+        # Curled: tip is closer to wrist, or tip is tucked close to MCP
+        elif d_tip_wrist < d_pip_wrist * 1.05 or dist(tip, mcp) < d_mcp_wrist * 0.55:
+            curled_count += 1
+
+    # Thumb: 2 (MCP), 3 (IP), 4 (TIP)
+    thumb_tip = landmarks[4]
+    pinky_mcp = landmarks[17]
+    thumb_mcp = landmarks[2]
+    d_thumb_wrist = dist(thumb_tip, wrist)
+    d_thumb_mcp = dist(thumb_mcp, wrist)
+
+    thumb_extended = (d_thumb_wrist > d_thumb_mcp * 1.05 and
+                      dist(thumb_tip, pinky_mcp) > dist(thumb_mcp, pinky_mcp) * 0.9)
+
+    if extended_count >= 4:
+        return HandPose.OPEN_PALM
+    elif extended_count >= 3 and thumb_extended:
+        return HandPose.OPEN_PALM
+    elif curled_count >= 4:
+        return HandPose.CLOSED_FIST
+    elif curled_count >= 3 and not thumb_extended:
+        return HandPose.CLOSED_FIST
+
+    return HandPose.UNKNOWN
+
+
 class GestureDirection(Enum):
     LEFT_TO_RIGHT = auto()   # → PAUSE
     RIGHT_TO_LEFT = auto()   # → PLAY

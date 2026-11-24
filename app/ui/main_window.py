@@ -148,12 +148,12 @@ class MainWindow:
         legend_frame = tk.Frame(root, bg=_PANEL)
         legend_frame.pack(fill="x", padx=16, pady=4)
 
-        tk.Label(legend_frame, text="← →  swipe right", bg=_PANEL, fg=_FG,
+        tk.Label(legend_frame, text="✊  Closed Fist", bg=_PANEL, fg=_FG,
                  font=("Segoe UI", 9)).grid(row=0, column=0, sticky="w", padx=12, pady=(8, 2))
-        tk.Label(legend_frame, text="→  PAUSE", bg=_PANEL, fg=_YELLOW,
+        tk.Label(legend_frame, text="→  PAUSE / STOP", bg=_PANEL, fg=_YELLOW,
                  font=("Segoe UI", 9, "bold")).grid(row=0, column=1, sticky="w", padx=4)
 
-        tk.Label(legend_frame, text="→ ←  swipe left", bg=_PANEL, fg=_FG,
+        tk.Label(legend_frame, text="✋  Open Palm", bg=_PANEL, fg=_FG,
                  font=("Segoe UI", 9)).grid(row=1, column=0, sticky="w", padx=12, pady=(2, 8))
         tk.Label(legend_frame, text="→  PLAY", bg=_PANEL, fg=_GREEN,
                  font=("Segoe UI", 9, "bold")).grid(row=1, column=1, sticky="w", padx=4)

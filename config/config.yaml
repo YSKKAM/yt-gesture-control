@@ -2,30 +2,26 @@
 # All thresholds use normalized coordinates (0.0 – 1.0) relative to frame size
 # unless explicitly noted in comments.
 
+# YouTube Gesture Control — Configuration
+# Controls:
+#   ✊ Closed Fist -> PAUSE / STOP
+#   ✋ Open Palm   -> PLAY
+
 gesture:
-  # Minimum horizontal travel (fraction of frame width) to count as a gesture
-  min_displacement_x: 0.16
+  # Consecutive stable frames needed to confirm a pose (e.g. 2 frames @ 30fps = ~66ms)
+  stable_frames_required: 2
 
-  # Maximum allowed vertical drift (fraction of frame height)
-  max_displacement_y: 0.20
+  # Lockout after a pose triggers (ms) to avoid duplicate trigger spam while holding pose
+  cooldown_ms: 800
 
-  # Horizontal movement must be >= this multiple of vertical movement
-  direction_ratio: 1.5
-
-  # Minimum average speed (normalized units per second)
-  min_speed: 0.10
-
-  # Maximum time (ms) from first to last valid tracking frame
-  max_gesture_duration_ms: 1500
-
-  # Minimum time (ms) — prevents single-frame spike triggers
-  min_gesture_duration_ms: 80
-
-  # Lockout after a gesture fires (ms)
-  cooldown_ms: 1000
-
-  # Minimum number of consecutive frames with hand detected before tracking starts
+  # Legacy compatibility settings
   min_stable_frames: 2
+  min_displacement_x: 0.16
+  max_displacement_y: 0.20
+  direction_ratio: 1.5
+  min_speed: 0.10
+  max_gesture_duration_ms: 1500
+  min_gesture_duration_ms: 80
 
 camera:
   # Webcam device index (0 = first/default camera)
@@ -35,12 +31,24 @@ camera:
   fps: 30
 
 hand_tracking:
-  # MediaPipe detection confidence floor (0.0 – 1.0)
+  # Confidence floor (0.0 – 1.0)
   min_detection_confidence: 0.50
-  # MediaPipe tracking confidence floor (0.0 – 1.0)
   min_tracking_confidence: 0.50
-  # Which hand landmark to use for position (0 = wrist, 9 = middle finger base)
   tracking_landmark: 9
+
+youtube_control:
+  # Local WebSocket port — extension connects here
+  websocket_port: 9876
+  # How often to ping extension to check connection (seconds)
+  heartbeat_interval_s: 5
+
+logging:
+  # Log file location (relative to app root)
+  log_file: "logs/ytgc.log"
+  # Max log file size before rotation (bytes)
+  max_bytes: 5242880   # 5 MB
+  backup_count: 3
+  level: "INFO"
 
 youtube_control:
   # Local WebSocket port — extension connects here

@@ -32,7 +32,7 @@ from app.application_state.state import app_state, CameraStatus, YouTubeStatus
 from app.camera.capture import CameraCapture
 from app.hand_tracking.tracker import create_tracker
 from app.gesture_detection.state_machine import GestureStateMachine
-from app.gesture_detection.validator import GestureDirection
+from app.gesture_detection.validator import HandPose, GestureDirection
 from app.youtube_control.controller import YouTubeController
 from app.ui.main_window import MainWindow
 from app.system_tray.tray import SystemTray
@@ -66,15 +66,15 @@ def main() -> None:
     _camera_thread: Optional[threading.Thread] = None
     _camera_stop_event = threading.Event()
 
-    def _gesture_callback(direction: GestureDirection) -> None:
-        """Called by GestureStateMachine when a gesture is confirmed."""
-        if direction == GestureDirection.LEFT_TO_RIGHT:
-            logger.info("Gesture: LEFT_TO_RIGHT → PAUSE")
-            app_state.set_last_gesture("← → (PAUSE)")
+    def _gesture_callback(pose: HandPose) -> None:
+        """Called by GestureStateMachine when a pose (Fist/Palm) is confirmed."""
+        if pose == HandPose.CLOSED_FIST:
+            logger.info("Pose: CLOSED_FIST → PAUSE")
+            app_state.set_last_gesture("✊ Closed Fist (PAUSE)")
             yt_controller.send_action("pause")
-        elif direction == GestureDirection.RIGHT_TO_LEFT:
-            logger.info("Gesture: RIGHT_TO_LEFT → PLAY")
-            app_state.set_last_gesture("→ ← (PLAY)")
+        elif pose == HandPose.OPEN_PALM:
+            logger.info("Pose: OPEN_PALM → PLAY")
+            app_state.set_last_gesture("✋ Open Palm (PLAY)")
             yt_controller.send_action("play")
 
     fsm = GestureStateMachine(on_gesture=_gesture_callback)

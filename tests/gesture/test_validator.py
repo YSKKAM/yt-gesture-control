@@ -197,3 +197,62 @@ class TestEdgeCases:
         traj = make_noisy_trajectory(0.1, 0.75, noise=0.015, duration_ms=400)
         result = validate_gesture(traj)
         assert result.valid
+
+
+# ---------------------------------------------------------------------------
+# Pose Classification (Closed Fist vs Open Palm)
+# ---------------------------------------------------------------------------
+
+class TestPoseClassification:
+
+    def test_empty_landmarks_returns_none(self):
+        from app.gesture_detection.validator import classify_pose_from_landmarks, HandPose
+        assert classify_pose_from_landmarks([]) == HandPose.NONE
+
+    def test_classify_open_palm(self):
+        from app.gesture_detection.validator import classify_pose_from_landmarks, HandPose
+        from dataclasses import dataclass
+
+        @dataclass
+        class Pt:
+            x: float
+            y: float
+
+        # Open hand: wrist at y=0.8, fingers extended upward (y=0.2 - 0.4)
+        lms = [Pt(0.5, 0.8)] # wrist (0)
+        # 1-4: Thumb
+        lms.extend([Pt(0.45, 0.7), Pt(0.40, 0.6), Pt(0.35, 0.5), Pt(0.30, 0.4)])
+        # 5-8: Index
+        lms.extend([Pt(0.45, 0.5), Pt(0.45, 0.38), Pt(0.45, 0.28), Pt(0.45, 0.18)])
+        # 9-12: Middle
+        lms.extend([Pt(0.50, 0.48), Pt(0.50, 0.35), Pt(0.50, 0.25), Pt(0.50, 0.15)])
+        # 13-16: Ring
+        lms.extend([Pt(0.55, 0.5), Pt(0.55, 0.38), Pt(0.55, 0.28), Pt(0.55, 0.18)])
+        # 17-20: Pinky
+        lms.extend([Pt(0.60, 0.52), Pt(0.60, 0.42), Pt(0.60, 0.32), Pt(0.60, 0.22)])
+
+        assert classify_pose_from_landmarks(lms) == HandPose.OPEN_PALM
+
+    def test_classify_closed_fist(self):
+        from app.gesture_detection.validator import classify_pose_from_landmarks, HandPose
+        from dataclasses import dataclass
+
+        @dataclass
+        class Pt:
+            x: float
+            y: float
+
+        # Closed fist: wrist at y=0.8, all fingertips curled close to MCP / palm
+        lms = [Pt(0.5, 0.8)] # wrist (0)
+        # 1-4: Thumb curled
+        lms.extend([Pt(0.45, 0.7), Pt(0.45, 0.65), Pt(0.48, 0.62), Pt(0.50, 0.60)])
+        # 5-8: Index curled
+        lms.extend([Pt(0.45, 0.55), Pt(0.45, 0.50), Pt(0.45, 0.55), Pt(0.45, 0.58)])
+        # 9-12: Middle curled
+        lms.extend([Pt(0.50, 0.55), Pt(0.50, 0.48), Pt(0.50, 0.54), Pt(0.50, 0.58)])
+        # 13-16: Ring curled
+        lms.extend([Pt(0.55, 0.55), Pt(0.55, 0.50), Pt(0.55, 0.55), Pt(0.55, 0.58)])
+        # 17-20: Pinky curled
+        lms.extend([Pt(0.60, 0.58), Pt(0.60, 0.52), Pt(0.60, 0.56), Pt(0.60, 0.60)])
+
+        assert classify_pose_from_landmarks(lms) == HandPose.CLOSED_FIST
