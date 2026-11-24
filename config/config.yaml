@@ -4,41 +4,41 @@
 
 gesture:
   # Minimum horizontal travel (fraction of frame width) to count as a gesture
-  min_displacement_x: 0.20
+  min_displacement_x: 0.16
 
   # Maximum allowed vertical drift (fraction of frame height)
-  max_displacement_y: 0.12
+  max_displacement_y: 0.20
 
   # Horizontal movement must be >= this multiple of vertical movement
-  direction_ratio: 2.5
+  direction_ratio: 1.5
 
   # Minimum average speed (normalized units per second)
-  min_speed: 0.15
+  min_speed: 0.10
 
   # Maximum time (ms) from first to last valid tracking frame
   max_gesture_duration_ms: 1500
 
   # Minimum time (ms) — prevents single-frame spike triggers
-  min_gesture_duration_ms: 120
+  min_gesture_duration_ms: 80
 
   # Lockout after a gesture fires (ms)
   cooldown_ms: 1000
 
   # Minimum number of consecutive frames with hand detected before tracking starts
-  min_stable_frames: 3
+  min_stable_frames: 2
 
 camera:
   # Webcam device index (0 = first/default camera)
   device_index: 0
   width: 640
   height: 480
-  fps: 20
+  fps: 30
 
 hand_tracking:
   # MediaPipe detection confidence floor (0.0 – 1.0)
-  min_detection_confidence: 0.75
+  min_detection_confidence: 0.50
   # MediaPipe tracking confidence floor (0.0 – 1.0)
-  min_tracking_confidence: 0.70
+  min_tracking_confidence: 0.50
   # Which hand landmark to use for position (0 = wrist, 9 = middle finger base)
   tracking_landmark: 9
 

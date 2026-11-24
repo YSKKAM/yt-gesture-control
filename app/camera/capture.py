@@ -84,6 +84,8 @@ class CameraCapture:
                 logger.warning("Camera read failed — camera may have disconnected")
                 return None
 
+            # Mirror frame horizontally so user's physical movement matches coordinate movement
+            frame = cv2.flip(frame, 1)
             return frame
 
     def release(self) -> None:

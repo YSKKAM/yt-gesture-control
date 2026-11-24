@@ -81,8 +81,12 @@ class _MediaPipeTasksTracker:
         rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
 
-        # Increment timestamp (VIDEO mode requires monotonically increasing timestamps)
-        self._frame_timestamp_ms += 50  # ~20fps
+        # Monotonically increasing timestamp (in ms) for MediaPipe's temporal filters
+        import time
+        now_ms = int(time.monotonic() * 1000)
+        if now_ms <= self._frame_timestamp_ms:
+            now_ms = self._frame_timestamp_ms + 1
+        self._frame_timestamp_ms = now_ms
 
         result = self._detector.detect_for_video(mp_image, self._frame_timestamp_ms)
 
@@ -93,10 +97,8 @@ class _MediaPipeTasksTracker:
         landmarks = result.hand_landmarks[0]
         lm = landmarks[self._landmark_id]
 
-        # Get handedness confidence if available
-        confidence = 1.0
-        if result.handedness:
-            confidence = result.handedness[0][0].score
+        # Landmark detection is already threshold-filtered by HandLandmarkerOptions
+        confidence = float(lm.presence) if getattr(lm, "presence", None) is not None else 1.0
 
         return HandPosition(x=lm.x, y=lm.y, confidence=confidence)
 

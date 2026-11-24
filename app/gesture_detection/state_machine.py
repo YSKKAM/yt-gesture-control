@@ -55,12 +55,14 @@ class GestureStateMachine:
         self._state = FSMState.IDLE
         self._trajectory: List[TrajectoryPoint] = []
         self._stable_frame_count = 0
+        self._lost_frames_count = 0
         self._cooldown_end_ms: float = 0.0
 
         cfg = settings.gesture
         self._min_stable_frames = cfg.min_stable_frames
         self._cooldown_ms = cfg.cooldown_ms
         self._min_confidence = settings.hand_tracking.min_detection_confidence
+        self._max_duration_ms = cfg.max_gesture_duration_ms
 
     # ------------------------------------------------------------------
     # Public API
@@ -80,22 +82,36 @@ class GestureStateMachine:
             return self._state
 
         if hand is None or hand.confidence < self._min_confidence:
+            self._lost_frames_count += 1
+            # If we were tracking, allow up to 2 frames of dropped detection (motion blur)
+            if self._state == FSMState.TRACKING and self._lost_frames_count <= 2:
+                self._try_validate()
+                return self._state
             self._on_hand_lost()
             return self._state
 
         # Hand is present and confident
+        self._lost_frames_count = 0
+
         if self._state == FSMState.IDLE:
             self._stable_frame_count = 1
+            self._trajectory = [TrajectoryPoint(hand.x, hand.y, now_ms)]
             self._transition(FSMState.HAND_DETECTED)
 
         elif self._state == FSMState.HAND_DETECTED:
             self._stable_frame_count += 1
+            self._trajectory.append(TrajectoryPoint(hand.x, hand.y, now_ms))
             if self._stable_frame_count >= self._min_stable_frames:
-                self._trajectory = [TrajectoryPoint(hand.x, hand.y, now_ms)]
                 self._transition(FSMState.TRACKING)
 
         elif self._state == FSMState.TRACKING:
             self._trajectory.append(TrajectoryPoint(hand.x, hand.y, now_ms))
+
+            # Prune points older than max_duration_ms (keeps trajectory bounded and fresh)
+            cutoff_ms = now_ms - self._max_duration_ms
+            while len(self._trajectory) > 2 and self._trajectory[0].timestamp_ms < cutoff_ms:
+                self._trajectory.pop(0)
+
             self._try_validate()
 
         return self._state
@@ -108,6 +124,7 @@ class GestureStateMachine:
         """Force reset to IDLE (e.g. on camera disconnect)."""
         self._trajectory.clear()
         self._stable_frame_count = 0
+        self._lost_frames_count = 0
         self._transition(FSMState.IDLE)
 
     # ------------------------------------------------------------------
@@ -120,20 +137,41 @@ class GestureStateMachine:
             self._try_validate()
         self._trajectory.clear()
         self._stable_frame_count = 0
+        self._lost_frames_count = 0
         if self._state != FSMState.COOLDOWN:
             self._transition(FSMState.IDLE)
 
+    def _trigger(self, direction: GestureDirection) -> None:
+        """Fire gesture confirmation and enter cooldown."""
+        logger.info("Gesture confirmed: %s", direction.name)
+        self._trajectory.clear()
+        self._stable_frame_count = 0
+        self._lost_frames_count = 0
+        self._cooldown_end_ms = time.monotonic() * 1000 + self._cooldown_ms
+        self._transition(FSMState.COOLDOWN)
+        self._on_gesture(direction)
+
     def _try_validate(self) -> None:
-        """Attempt to validate the current trajectory."""
+        """Attempt to validate the full trajectory or recent sub-stroke."""
+        if len(self._trajectory) < 2:
+            return
+
+        # 1. First test full trajectory
         result = validate_gesture(self._trajectory)
         if result.valid:
-            logger.info("Gesture confirmed: %s", result.direction.name)
-            self._trajectory.clear()
-            self._stable_frame_count = 0
-            self._cooldown_end_ms = time.monotonic() * 1000 + self._cooldown_ms
-            self._transition(FSMState.COOLDOWN)
-            self._on_gesture(result.direction)
-        # If not valid yet, keep accumulating (TRACKING continues)
+            self._trigger(result.direction)
+            return
+
+        # 2. Test recent sub-strokes (in case hand rested briefly before waving)
+        # Check sub-slices from index 1 to len-2
+        for i in range(1, len(self._trajectory) - 1):
+            sub = self._trajectory[i:]
+            if len(sub) < 2:
+                break
+            sub_res = validate_gesture(sub)
+            if sub_res.valid:
+                self._trigger(sub_res.direction)
+                return
 
     def _transition(self, new_state: FSMState) -> None:
         if new_state != self._state:
